@@ -1,0 +1,38 @@
+# --- Dependencias ---
+node_modules/
+
+# --- Secretos (principio V de la constitución) ---
+# Ningún .env real entra al repo; solo las plantillas .example
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Builds y salidas ---
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- Expo / React Native ---
+.expo/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.keystore
+
+# --- Configuración local de Claude Code (personal, no compartida) ---
+.claude/settings.local.json
+
+# --- Sistema operativo y editores ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# --- Logs ---
+*.log
+npm-debug.log*
