@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,17 +31,18 @@
 
 ## Notes
 
-- Quedan 4 marcadores [NEEDS CLARIFICATION], a resolver en `/speckit-clarify`:
-  - FR-005: respuesta del registro cuando el email ya existe.
-  - FR-016: límite de intentos fallidos de ingreso (afecta a FR-017 y CA-001-14).
-  - FR-019: límite de solicitudes de registro por origen (afecta a CA-001-23).
-  - FR-021: duración de la sesión (afecta a CA-001-16 y CA-001-17).
-- Se superó el máximo de 3 marcadores que sugiere la plantilla por decisión explícita del usuario (FR-019 se resuelve en Clarify junto con FR-016).
-- "Requirements are testable" se marca como cumplido salvo FR-005, FR-016/017, FR-019 y FR-021, que se vuelven testables al resolver las clarificaciones.
+- No quedan marcadores [NEEDS CLARIFICATION]. En la spec inicial hubo 4 (FR-005, FR-016, FR-019 y FR-021), uno más que el máximo de 3 que sugiere la plantilla, por decisión explícita del usuario. Se resolvieron en `/speckit-clarify` el 2026-10-26.
+- Todos los FR son testables con umbrales concretos.
 - Todo FR tiene un CA asociado, excepto FR-012 (pegar contraseña o usar gestor) y FR-030 (almacenamiento seguro en el teléfono), marcados como "verificado por revisión".
 - Revisión 2026-10-25:
   - Se dividieron FR-007, FR-019 (el anterior) y FR-028 en un comportamiento por requisito y se renumeraron los FR (ahora FR-001 a FR-030).
   - Se agregaron CA-001-21 a CA-001-25.
   - Se eliminó SC-007.
   - Se agregó la sección "Decisiones aprobadas".
+- Revisión 2026-10-26 (`/speckit-clarify`, ver la sección "Clarifications" de la spec):
+  - FR-005: el registro informa explícitamente que el email ya existe. Es una decisión consciente, mitigada con FR-019.
+  - FR-016 y FR-018: límite por email con espera creciente (se reinicia con un ingreso exitoso o tras 15 min sin fallos) y límite por origen.
+  - FR-019: 5 solicitudes de registro por origen por hora.
+  - FR-021: la sesión dura 30 días desde el último uso con el servidor; abrir la app sin conexión no renueva el plazo.
+  - Se agregaron CA-001-26 (reinicio del contador por email) y CA-001-27 (límite por origen).
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`

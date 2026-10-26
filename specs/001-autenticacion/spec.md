@@ -19,7 +19,7 @@ Esta feature entrega la puerta de entrada: crear la cuenta, ingresar y cerrar se
 NIST SP 800-63B rev. 4 recomienda un mínimo de 15 caracteres cuando la contraseña es el único factor. En este proyecto se fija el mínimo en **12 caracteres** por comodidad al escribir en el teclado del móvil. El riesgo se compensa con dos controles obligatorios de esta misma spec:
 
 1. Rechazo de contraseñas comunes o filtradas (FR-009).
-2. Límite de intentos fallidos de ingreso (FR-016 a FR-018).
+2. Límite de intentos fallidos de ingreso (FR-016 a FR-018) y de solicitudes de registro (FR-019).
 
 Si alguno de estos dos controles se retira en el futuro, esta decisión debe revisarse.
 
@@ -30,6 +30,18 @@ Decisiones tomadas durante la redacción de la spec y aprobadas el 2026-10-25:
 - **Máximo de 128 caracteres en la contraseña** (FR-007, FR-008): el requisito original pide "permitir al menos 64"; se fija 128 como máximo para dar margen a frases largas y a gestores de contraseñas, y para acotar el esfuerzo de verificación.
 - **Sesiones múltiples con cierre por dispositivo** (FR-027): una misma cuenta puede tener sesión abierta en varios teléfonos a la vez; cerrar sesión afecta solo al dispositivo actual. No existe "cerrar sesión en todos los dispositivos" en esta feature.
 - **Rechazo de contraseña igual al email** (FR-009): una contraseña idéntica al email de la persona se rechaza por ser demasiado predecible.
+
+### Decisión consciente sobre revelar emails registrados
+
+El registro informa explícitamente que un email ya tiene cuenta (FR-005). Con el alcance actual no es posible ocultarlo: el registro exitoso abre sesión de inmediato (FR-001) y la verificación del email está fuera de alcance, así que cualquier respuesta distinta ya revela la existencia del email. Se acepta el riesgo de que alguien averigüe qué emails tienen cuenta, mitigado con el límite de solicitudes de registro (FR-019). El ingreso sigue sin revelarlo (FR-015). Esta decisión debe revisarse cuando se incorpore la verificación del email.
+
+## Clarifications
+
+### Session 2026-10-26
+
+- Q: Cuando alguien intenta registrarse con un email que ya tiene cuenta, ¿la app debe decirle explícitamente "este email ya está registrado"? → A: Sí, mensaje explícito ("Este email ya tiene una cuenta. Ingresa con él."); riesgo aceptado y mitigado con FR-019; se revisa al incorporar la verificación del email.
+- Q: ¿Qué límites aplicamos a los intentos fallidos de ingreso y a las solicitudes de registro, y qué pasa al alcanzarlos? → A: Por email normalizado (exista o no): desde el 5.º fallo consecutivo, espera de 1 min que se duplica en cada fallo siguiente hasta un tope de 15 min; el contador se reinicia con un ingreso exitoso o tras 15 min sin fallos. Por origen: 20 ingresos fallidos en 15 min → espera de 15 min. Registro: 5 solicitudes por origen por hora.
+- Q: ¿Cuánto tiempo debe seguir abierta la sesión en un teléfono antes de pedir de nuevo email y contraseña? → A: 30 días desde el último uso; "uso" es cualquier comunicación con el servidor con una sesión válida. Abrir la app sin conexión no renueva el plazo.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -45,7 +57,7 @@ Una persona que instala la app por primera vez crea su cuenta con su email y una
 
 1. **CA-001-01** — **Dado** que el email `ana@ejemplo.com` no está registrado, **Cuando** la persona se registra con ese email y una contraseña válida de 12 caracteres o más que no es común ni filtrada, **Entonces** se crea su cuenta y queda con sesión abierta.
 2. **CA-001-02** — **Dado** que la persona está en el formulario de registro, **Cuando** escribe un email sin formato válido (por ejemplo `ana@`, `ana.ejemplo.com` o vacío), **Entonces** el registro se rechaza con un mensaje que indica que el email no es válido y no se crea ninguna cuenta.
-3. **CA-001-03** — **Dado** que `ana@ejemplo.com` ya tiene una cuenta, **Cuando** alguien intenta registrarse con ese email (o con una variante que solo difiere en mayúsculas o espacios al inicio o final, como ` Ana@Ejemplo.com `), **Entonces** el registro se rechaza y no se crea una segunda cuenta. [El texto exacto del mensaje depende de la clarificación de FR-005.]
+3. **CA-001-03** — **Dado** que `ana@ejemplo.com` ya tiene una cuenta, **Cuando** alguien intenta registrarse con ese email (o con una variante que solo difiere en mayúsculas o espacios al inicio o final, como ` Ana@Ejemplo.com `), **Entonces** el registro se rechaza con el mensaje "Este email ya tiene una cuenta. Ingresa con él." y no se crea una segunda cuenta.
 4. **CA-001-04** — **Dado** que la persona está en el formulario de registro, **Cuando** usa una contraseña de 11 caracteres o menos, **Entonces** el registro se rechaza con un mensaje que indica el mínimo de 12 caracteres.
 5. **CA-001-05** — **Dado** que la persona está en el formulario de registro, **Cuando** usa contraseñas válidas de exactamente 12, 64 y 128 caracteres, **Entonces** las tres se aceptan.
 6. **CA-001-06** — **Dado** que la persona está en el formulario de registro, **Cuando** usa una contraseña de 12 o más caracteres formada solo por letras minúsculas (sin mayúsculas, números ni símbolos) que no es común ni filtrada, **Entonces** se acepta.
@@ -54,7 +66,7 @@ Una persona que instala la app por primera vez crea su cuenta con su email y una
 9. **CA-001-09** — **Dado** que la persona está en el formulario de registro, **Cuando** usa una contraseña con espacios, tildes, `ñ` o emojis que cumple la longitud y no es común, **Entonces** se acepta, y luego puede ingresar escribiendo exactamente la misma contraseña.
 10. **CA-001-21** — **Dado** que la persona se registra con el email `ana@ejemplo.com`, **Cuando** usa como contraseña `ana@ejemplo.com`, **Entonces** el registro se rechaza con un mensaje que indica que la contraseña es demasiado predecible y no se crea la cuenta.
 11. **CA-001-22** — **Dado** que el email `ana@ejemplo.com` no está registrado, **Cuando** llegan dos solicitudes de registro simultáneas con ese email, **Entonces** se crea exactamente una cuenta y la otra solicitud se rechaza como email ya registrado.
-12. **CA-001-23** — **Dado** que desde un mismo origen se alcanzó el límite de solicitudes de registro de FR-019, **Cuando** se envía una nueva solicitud de registro desde ese origen, **Entonces** se rechaza sin crear la cuenta y se informa a la persona que espere antes de volver a intentar. [Umbral y ventana pendientes de clarificación.]
+12. **CA-001-23** — **Dado** que desde un mismo origen se enviaron 5 solicitudes de registro en la última hora, **Cuando** se envía una 6.ª solicitud de registro desde ese origen dentro de esa hora, **Entonces** se rechaza sin crear la cuenta y se informa a la persona que espere antes de volver a intentar.
 
 ---
 
@@ -72,10 +84,12 @@ Una persona que ya tiene cuenta (por ejemplo, tras reinstalar la app o desde otr
 2. **CA-001-11** — **Dado** que existe la cuenta `ana@ejemplo.com`, **Cuando** la persona ingresa con ` ANA@ejemplo.com ` (otras mayúsculas o espacios alrededor) y la contraseña correcta, **Entonces** ingresa a la misma cuenta.
 3. **CA-001-12** — **Dado** que existe la cuenta `ana@ejemplo.com`, **Cuando** alguien intenta ingresar con la contraseña incorrecta, **Entonces** el ingreso se rechaza con un mensaje genérico ("email o contraseña incorrectos").
 4. **CA-001-13** — **Dado** que `nadie@ejemplo.com` no está registrado, **Cuando** alguien intenta ingresar con ese email, **Entonces** recibe exactamente el mismo mensaje genérico que en CA-001-12, sin revelar si el email existe.
-5. **CA-001-14** — **Dado** que se ha alcanzado el límite de intentos fallidos de ingreso definido en FR-016, **Cuando** se hace un nuevo intento (incluso con la contraseña correcta), **Entonces** el sistema aplica la restricción definida en FR-017 e informa a la persona qué puede hacer. [Umbral y efecto pendientes de clarificación.]
+5. **CA-001-14** — **Dado** que para `ana@ejemplo.com` se registraron 5 intentos fallidos consecutivos, **Cuando** se hace un nuevo intento antes de que pase 1 minuto (incluso con la contraseña correcta), **Entonces** se rechaza indicando cuándo puede volver a intentar; y cada fallo adicional duplica la espera (2, 4, 8 min…) hasta un máximo de 15 minutos. Con `nadie@ejemplo.com` (no registrado) se obtiene exactamente la misma respuesta.
 6. **CA-001-15** — **Dado** que dos personas tienen cuenta (`ana@ejemplo.com` y `beto@ejemplo.com`), **Cuando** Ana ingresa, **Entonces** solo puede ver y operar sobre los datos asociados a su cuenta, y cualquier intento de acceder a datos de Beto se trata como si esos datos no existieran.
-7. **CA-001-16** — **Dado** que la persona ingresó y cerró la app sin cerrar sesión, **Cuando** vuelve a abrir la app dentro del tiempo de vigencia definido en FR-021, **Entonces** sigue con la sesión abierta sin volver a escribir sus credenciales.
-8. **CA-001-17** — **Dado** que la sesión de la persona superó el tiempo de vigencia definido en FR-021, **Cuando** intenta usar la app, **Entonces** se le pide ingresar de nuevo. [Duración pendiente de clarificación.]
+7. **CA-001-16** — **Dado** que la persona ingresó y cerró la app sin cerrar sesión, **Cuando** vuelve a abrir la app con conexión 29 días después de su último uso, **Entonces** sigue con la sesión abierta sin volver a escribir sus credenciales, y el plazo de 30 días vuelve a contar desde ese momento.
+8. **CA-001-17** — **Dado** que pasaron más de 30 días desde el último uso de la sesión (aunque en ese tiempo la persona haya abierto la app sin conexión), **Cuando** intenta usar la app con conexión, **Entonces** se le pide ingresar de nuevo.
+9. **CA-001-26** — **Dado** que para `ana@ejemplo.com` hay 4 intentos fallidos consecutivos, **Cuando** pasan 15 minutos sin nuevos fallos y luego se produce 1 fallo más, **Entonces** no se aplica ninguna espera (el contador se reinició y ese fallo cuenta como el primero); y **Dado** el mismo estado de 4 fallos, **Cuando** la persona ingresa con éxito y después falla 1 vez, **Entonces** tampoco se aplica espera.
+10. **CA-001-27** — **Dado** que desde un mismo origen se registraron 20 ingresos fallidos en los últimos 15 minutos, repartidos entre emails distintos, **Cuando** se envía un nuevo ingreso desde ese origen (incluso con el email y la contraseña correctos de `ana@ejemplo.com`), **Entonces** se rechaza indicando cuándo puede volver a intentar, sin revelar si el email existe; desde otro origen, Ana ingresa sin restricción; y desde el origen restringido se vuelve a aceptar el ingreso cuando terminan los 15 minutos de espera.
 
 ---
 
@@ -115,6 +129,7 @@ Aplican a las tres historias.
 - **Doble toque en "Registrarme"**: dos envíos casi simultáneos con el mismo email nuevo crean una sola cuenta; el segundo envío se trata como email ya registrado (CA-001-22).
 - **Sin conexión**: si no hay conexión al registrarse, ingresar o cerrar sesión, la app informa que no hay conexión y no da por hecha la operación; los datos escritos en el formulario (excepto la contraseña) no se pierden.
 - **Cerrar sesión sin conexión**: la app borra igualmente la sesión del teléfono y vuelve a la pantalla de ingreso; la invalidación en el servidor se completa al recuperar conexión o al expirar la sesión.
+- **Abrir la app sin conexión**: no renueva el plazo de la sesión (FR-021); solo cuenta como uso la comunicación con el servidor con una sesión válida (CA-001-17).
 - **Pegar contraseña o usar gestor de contraseñas**: está permitido en registro e ingreso.
 - **Contraseña igual al email**: se rechaza como contraseña demasiado predecible (CA-001-21).
 
@@ -140,7 +155,7 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 - **FR-002** *(ubicuo)*: El sistema DEBE normalizar el email recortando espacios al inicio y al final y tratándolo sin distinción de mayúsculas, tanto al registrar como al ingresar. → CA-001-03, CA-001-11
 - **FR-003** *(no deseado)*: SI el email está vacío o no tiene un formato válido (una parte local, una `@` y un dominio con al menos un punto), ENTONCES el sistema DEBE rechazar el registro, indicar que el email no es válido y no crear la cuenta. → CA-001-02
 - **FR-004** *(no deseado)*: SI el email normalizado ya pertenece a una cuenta existente, ENTONCES el sistema DEBE rechazar el registro sin crear ni modificar ninguna cuenta. → CA-001-03
-- **FR-005** *(no deseado)*: SI el registro se rechaza porque el email ya existe, ENTONCES el sistema DEBE responder [NEEDS CLARIFICATION: ¿se le dice explícitamente a la persona que el email ya está registrado (más claro, pero permite averiguar qué emails tienen cuenta), o se usa una respuesta que no lo revela?]. → CA-001-03
+- **FR-005** *(no deseado)*: SI el registro se rechaza porque el email ya existe, ENTONCES el sistema DEBE informar explícitamente que el email ya tiene una cuenta e invitar a ingresar con él (ver "Decisión consciente sobre revelar emails registrados"). → CA-001-03
 - **FR-006** *(no deseado)*: SI la contraseña tiene menos de 12 caracteres, ENTONCES el sistema DEBE rechazar el registro indicando el mínimo de 12 caracteres. → CA-001-04
 - **FR-007** *(ubicuo)*: El sistema DEBE aceptar contraseñas de 12 a 128 caracteres (cumpliendo así el requisito de permitir al menos 64), contando caracteres tal como los percibe la persona. → CA-001-05
 - **FR-008** *(no deseado)*: SI la contraseña tiene más de 128 caracteres, ENTONCES el sistema DEBE rechazar el registro indicando el máximo de 128 caracteres. → CA-001-08
@@ -154,15 +169,17 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 
 - **FR-014** *(por evento)*: CUANDO una persona envía su email y su contraseña correctos, el sistema DEBE abrir una sesión en su cuenta. → CA-001-10, CA-001-11
 - **FR-015** *(no deseado)*: SI el email no está registrado o la contraseña no corresponde, ENTONCES el sistema DEBE rechazar el ingreso con el mismo mensaje genérico en ambos casos, y en un tiempo de respuesta que no permita distinguir un caso del otro. → CA-001-12, CA-001-13
-- **FR-016** *(ubicuo)*: El sistema DEBE contar los intentos fallidos de ingreso y aplicar un límite de [NEEDS CLARIFICATION: ¿cuántos intentos fallidos, en qué ventana de tiempo, contados por cuenta, por origen o ambos, y qué efecto tienen (espera temporal creciente, bloqueo temporal de la cuenta por N minutos, u otro)?]. → CA-001-14
-- **FR-017** *(no deseado)*: SI se alcanza el límite de FR-016, ENTONCES el sistema DEBE rechazar los nuevos intentos de ingreso mientras dure la restricción, incluso con la contraseña correcta, e informar a la persona cuándo puede volver a intentar, sin revelar si el email existe. → CA-001-14
-- **FR-018** *(por evento)*: CUANDO una persona ingresa con éxito, el sistema DEBE reiniciar el conteo de intentos fallidos asociado a su cuenta. → CA-001-14
-- **FR-019** *(ubicuo)*: El sistema DEBE limitar también la frecuencia de solicitudes de registro desde un mismo origen, para impedir la creación masiva de cuentas y el sondeo de emails, con un límite de [NEEDS CLARIFICATION: ¿cuántas solicitudes de registro se permiten desde un mismo origen y en qué ventana de tiempo?]. → CA-001-23
+- **FR-016** *(ubicuo)*: El sistema DEBE contar los intentos fallidos de ingreso de dos formas y aplicar estos límites:
+  - **Por email normalizado** (exista o no una cuenta con ese email): a partir del 5.º fallo consecutivo, impone una espera de 1 minuto que se duplica con cada fallo siguiente (1, 2, 4, 8 min…) hasta un máximo de 15 minutos. El contador se reinicia con un ingreso exitoso o cuando pasan 15 minutos desde el último fallo. → CA-001-14, CA-001-26
+  - **Por origen**: si desde un mismo origen se acumulan 20 ingresos fallidos en una ventana de 15 minutos, impone una espera de 15 minutos a los ingresos desde ese origen. → CA-001-27
+- **FR-017** *(no deseado)*: SI se alcanza el límite de FR-016, ENTONCES el sistema DEBE rechazar los nuevos intentos de ingreso mientras dure la restricción, incluso con la contraseña correcta, e informar a la persona cuándo puede volver a intentar, sin revelar si el email existe. → CA-001-14, CA-001-27
+- **FR-018** *(por evento)*: CUANDO una persona ingresa con éxito, o pasan 15 minutos desde el último intento fallido con un email, el sistema DEBE reiniciar el conteo de intentos fallidos de ese email. → CA-001-26
+- **FR-019** *(ubicuo)*: El sistema DEBE limitar también la frecuencia de solicitudes de registro desde un mismo origen, para impedir la creación masiva de cuentas y el sondeo de emails, con un límite de 5 solicitudes de registro por origen en una ventana de 1 hora; las solicitudes que superen el límite se rechazan sin crear cuenta. → CA-001-23
 
 **Sesión**
 
 - **FR-020** *(por estado)*: MIENTRAS la sesión esté vigente, el sistema DEBE mantener a la persona dentro de su cuenta aunque cierre y reabra la app. → CA-001-16
-- **FR-021** *(por evento)*: CUANDO se cumpla el tiempo de vigencia de la sesión, el sistema DEBE dar la sesión por expirada; la sesión DEBE dejar de ser válida tras [NEEDS CLARIFICATION: ¿cuánto tiempo permanece abierta la sesión? (por ejemplo, 30 días desde el último uso, 30 días fijos desde el ingreso, o cerrar al salir de la app)]. → CA-001-17
+- **FR-021** *(por evento)*: CUANDO se cumpla el tiempo de vigencia de la sesión, el sistema DEBE dar la sesión por expirada; la sesión DEBE dejar de ser válida tras 30 días sin uso. "Uso" es cualquier comunicación de la app con el servidor con esa sesión válida; cada uso reinicia el plazo de 30 días. Abrir la app sin conexión NO cuenta como uso. → CA-001-16, CA-001-17
 - **FR-022** *(no deseado)*: SI la sesión expiró o fue cerrada, ENTONCES el sistema DEBE rechazar cualquier acceso a datos de la cuenta y llevar a la persona a la pantalla de ingreso. → CA-001-17, CA-001-19
 
 **Aislamiento de datos**
@@ -185,8 +202,8 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 ### Key Entities *(include if feature involves data)*
 
 - **Cuenta de usuario**: representa a una persona. Atributos: email normalizado (único), verificador de la contraseña (no la contraseña), fecha de creación. Es la dueña de todos los datos de usuario que se creen en features posteriores.
-- **Sesión**: acceso abierto de una cuenta en un dispositivo concreto. Atributos: cuenta a la que pertenece, momento de inicio, momento de expiración, estado (vigente, cerrada, expirada). Una cuenta puede tener varias sesiones (una por dispositivo).
-- **Registro de intentos fallidos**: conteo de intentos de ingreso fallidos en una ventana de tiempo, usado para aplicar el límite de FR-016. Su forma exacta depende de la clarificación de FR-016.
+- **Sesión**: acceso abierto de una cuenta en un dispositivo concreto. Atributos: cuenta a la que pertenece, momento de inicio, momento del último uso, momento de expiración (último uso + 30 días), estado (vigente, cerrada, expirada). Una cuenta puede tener varias sesiones (una por dispositivo).
+- **Registro de intentos fallidos**: conteo usado para aplicar los límites de FR-016 y FR-019. Por email normalizado (exista o no una cuenta): fallos consecutivos, momento del último fallo y fin de la espera vigente. Por origen: fallos de ingreso y solicitudes de registro dentro de su ventana de tiempo. No guarda contraseñas.
 
 ## Success Criteria *(mandatory)*
 
