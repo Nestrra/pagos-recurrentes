@@ -34,6 +34,7 @@ Enfoque técnico (detalle y alternativas en [research.md](./research.md)):
 **Testing**:
 
 - API: Jest + Supertest. Unitarias con `FakeClock`; e2e contra un Postgres real de pruebas.
+- **Cobertura**: el umbral del 80 % sobre `src/**/*.service.ts` se mide con **unit + e2e juntos** (`test:cov` ejecuta ambos proyectos de Jest). Los CA se prueban sobre todo por HTTP; medir solo los unitarios subestimaría la cobertura real de los servicios.
 - App: Jest (`jest-expo`) + React Native Testing Library.
 - E2E móvil: Maestro, en local.
 
@@ -68,15 +69,18 @@ Enfoque técnico (detalle y alternativas en [research.md](./research.md)):
 | # | Principio | Cómo lo cumple el plan | Estado |
 |---|---|---|---|
 | I | La spec manda | El plan deriva de la spec con IDs congelados. Lo que el diseño descubrió (NFC, tope en bytes, intentos durante la espera) se llevó **primero a la spec** (FR-031, FR-032, FR-016 → CA-001-28…30) y después al plan. | ✅ |
-| II | Trazabilidad | Rama `001-autenticacion`. Tabla FR → componente (abajo). Cada CA se mapea a tests nombrados con su ID (`it('CA-001-14: …')`). Los PR listarán los CA cubiertos. | ✅ |
-| III | Tests como contrato | Cada CA-001-01…30 tiene al menos un test (Supertest o RNTL). Umbral del 80 % en `src/**/*.service.ts` aplicado en Jest/CI. Las pantallas Registro, Ingreso e Inicio con RNTL. Maestro para registro, ingreso y cierre de sesión. CI bloqueante. | ✅ (ver nota Maestro) |
+| II | Trazabilidad | Rama `001-autenticacion`. Tabla FR → componente (abajo). Cada CA se mapea a tests nombrados con su ID (`it('CA-001-14: …')`). Plantilla `.github/pull_request_template.md` con los campos "Spec" y "CA cubiertos" (T009). | ✅ |
+| III | Tests como contrato | Cada CA-001-01…31 tiene al menos un test (Supertest o RNTL). Umbral del 80 % en `src/**/*.service.ts`, medido sobre unit + e2e, aplicado en CI. Las pantallas Registro, Ingreso e Inicio con RNTL. Maestro para registro, ingreso y cierre de sesión. CI bloqueante. | ✅ (ver nota de ejecución local) |
 | IV | Aislamiento por usuario | `AccessTokenGuard` global con deny by default. `@CurrentUser()` saca el `userId` **solo** del token validado. `ValidationPipe` con `forbidNonWhitelisted` rechaza cualquier `userId` enviado por la app. Helper `findOwnedOrThrow()` devuelve 404 si el recurso no es del usuario (lo usarán las features 002+). | ✅ |
 | V | Seguridad por defecto | argon2id. Acceso de vida corta + renovación revocable rotada. Límites en los endpoints de auth. DTOs con whitelist. Secretos solo en env (`.env.example`). Logs sin cuerpos ni cabeceras. `expo-secure-store`. `npm audit --audit-level=high` en CI. HTTPS lo pone Cloudflare. | ✅ |
 | VI | Dinero y fechas | No hay montos en esta feature. Marcas de tiempo `timestamptz` en UTC, generadas con el `Clock` inyectado. | ✅ (N/A dinero) |
 | VII | Simplicidad | Solo lo que pide la spec. Sin paquete compartido, sin Redis, sin Passport, sin `@nestjs/config`, sin librería de formularios. Abstracciones extra justificadas: `Clock` (exigido por las restricciones), `OriginResolver` (Cloudflare), `findOwnedOrThrow` (FR-024). Formato de error único con filtro global. Migraciones Prisma versionadas. | ✅ |
 | VIII | Staging antes que producción | Esta feature no despliega. El CI corre en `develop` y `main`. Variables por ambiente en `.env.example`. El compose de staging y producción y el Dockerfile quedan para la fase Deploy. | ✅ (N/A en Plan) |
 
-**Nota Maestro (III, "DEBERÍA")**: los flujos de Maestro se escriben en esta feature y se ejecutan en local durante Verify. No entran al CI todavía porque los emuladores en GitHub Actions son lentos e inestables y Maestro Cloud es de pago (restricción). La desviación aplica solo a la ejecución en CI, no a la existencia del test.
+**Nota de ejecución local (III)**: dos verificaciones se ejecutan en local durante Verify y no en CI. La desviación aplica solo al lugar de ejecución, no a la existencia del test.
+
+1. **Maestro ("DEBERÍA")**: los flujos se escriben en esta feature (T084). No entran al CI porque los emuladores en GitHub Actions son lentos e inestables y Maestro Cloud es de pago (restricción).
+2. **Medición estadística de SC-006** (T087): comparar tiempos de respuesta en un runner de CI compartido da resultados intermitentes. En CI, CA-001-13 (T054) verifica de forma **determinista** que con email inexistente se ejecuta argon2 contra el hash ficticio (spy) y que el cuerpo es idéntico, lo que garantiza el mismo trabajo en ambos caminos. La medición de tiempos (mediana, N = 30) se ejecuta en local y su resultado se registra. Detalle en [research.md § R8](./research.md).
 
 **Resultado del gate**: ✅ pasa antes de Phase 0. **Re-evaluado tras Phase 1**: ✅ pasa. El diseño de datos y los contratos no introducen violaciones. "Complexity Tracking" queda vacío.
 
@@ -137,6 +141,7 @@ Rutas relativas a `apps/api/src/` (API) y `apps/mobile/` (app).
 | FR-030 | Credenciales solo en almacenamiento seguro | — | app `src/auth/token-storage.ts` (`expo-secure-store`; regla de lint que prohíbe `AsyncStorage`) | Revisión |
 | FR-031 | Normalizar la contraseña a NFC al registrar e ingresar | register, login | `auth/password-policy/normalize-password.ts` (`pw.normalize('NFC')`), llamado por `auth.service#register` y `#login` antes de la política, la lista, la comparación con el email y argon2id · app normaliza antes de medir | CA-001-28 |
 | FR-032 | > 1 024 bytes → rechazo sin procesar | register, login | `auth.service`: `Buffer.byteLength(pw, 'utf8') > 1024` sobre la entrada cruda, antes de NFC. Registro → `400 PASSWORD_TOO_LONG`; ingreso → `login-throttle.service#recordFailure` + `401 INVALID_CREDENTIALS` sin argon2 | CA-001-29 |
+| FR-033 | Credencial de renovación ya usada fuera de la gracia → cerrar sesión | `POST /v1/auth/refresh` | `sessions/session.service.ts#rotate` (regla 4 de data-model: `revokedAt = now`, `revokedReason = REFRESH_REUSE` → `401 SESSION_INVALID`; gracia de 30 s solo si el reemplazo no se usó) · app `src/api/client.ts` (401 en refresh → `signOutLocal` → Ingreso) | CA-001-31 |
 
 ### Endpoints (resumen; contrato completo en [contracts/openapi.yaml](./contracts/openapi.yaml))
 
@@ -275,12 +280,9 @@ apps/mobile/
 
 **Structure Decision**: monorepo con npm workspaces y dos aplicaciones, `apps/api` (NestJS, módulos por dominio) y `apps/mobile` (Expo Router), siguiendo la estructura objetivo de `CLAUDE.md`. `deploy/` solo tiene `local/compose.yml` en esta feature; staging y producción llegan en la fase Deploy.
 
-### Orden sugerido para `/speckit-tasks` (orientativo; no son tareas)
+### Orden de implementación
 
-1. Esqueleto del monorepo + CI mínimo (con confirmación para instalar dependencias).
-2. Base de la API: config, Prisma + primera migración (con confirmación), `Clock`, formato de error, logging.
-3. US1 Registro (P1) → US2 Ingreso + límites (P2) → US3 Cierre de sesión (P3); cada historia con sus tests de API y de app.
-4. Flujos Maestro y verificación de SC-001/SC-002.
+Ver [tasks.md](./tasks.md): orden, dependencias y matriz CA → test → implementación.
 
 ## Complexity Tracking
 

@@ -72,14 +72,14 @@ LoginOriginLock      (independiente: clave = HMAC del origen)
 | `tokenHash` | `char(64)` **UNIQUE** | SHA-256 hex del token opaco (32 bytes aleatorios en base64url). El token en claro solo existe en la respuesta y en el secure store del teléfono. |
 | `createdAt` | `timestamptz` | |
 | `usedAt` | `timestamptz` nullable | Se fija al rotar. |
-| `replacedById` | `uuid` nullable, FK → `RefreshToken.id` | El token emitido al rotar. |
+| `replacedById` | `uuid` nullable, FK → `RefreshToken.id` (`onDelete: SetNull`) | El token emitido al rotar. `SetNull` como red de seguridad: borrar un reemplazo nunca deja una FK colgando. |
 
 **Reglas de rotación** (R4), con `t` = token presentado y `S` = su sesión:
 
 1. `t` no existe o `S` no está vigente → `401 SESSION_INVALID`.
 2. `t.usedAt IS NULL` → se marca `usedAt = now`, se crea `t'`, `t.replacedById = t'.id`, `touch(S)` → `200`.
-3. `t.usedAt` no nulo **y** `now − t.usedAt ≤ 30 s` **y** `t.replacedBy.usedAt IS NULL` → **gracia**: se borra `t.replacedBy`, se crea `t''`, `t.replacedById = t''.id` → `200`.
-4. Cualquier otro caso con `t.usedAt` no nulo → **reutilización**: `S.revokedAt = now`, `revokedReason = REFRESH_REUSE` → `401 SESSION_INVALID`.
+3. `t.usedAt` no nulo **y** `now − t.usedAt ≤ 30 s` **y** `t.replacedBy.usedAt IS NULL` → **gracia** (FR-033): en este orden, (a) se crea `t''`, (b) `t.replacedById = t''.id`, (c) se borra el reemplazo anterior, que ya no está referenciado → `200`.
+4. Cualquier otro caso con `t.usedAt` no nulo → **reutilización** (FR-033, CA-001-31): `S.revokedAt = now`, `revokedReason = REFRESH_REUSE` → `401 SESSION_INVALID`.
 
 Todo el proceso corre en una transacción con `SELECT … FOR UPDATE` sobre `t` para evitar carreras.
 

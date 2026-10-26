@@ -183,6 +183,8 @@ Un punto de código ocupa como máximo 4 bytes en UTF-8, así que una contraseñ
 | **Solo tokens opacos (acceso también opaco)** | Funcionaría igual de bien con la consulta por solicitud, pero se aparta del modelo "acceso de vida corta + renovación" pedido. El JWT permite rechazar sin ir a BD los tokens mal firmados o vencidos. |
 | **Token de renovación como JWT** | No hace falta que sea autocontenido: igual se consulta en BD para rotar y revocar. Opaco es más simple y no expone claims. |
 | **Rotación sin ventana de gracia** | Cierres de sesión espurios en redes móviles inestables. |
+
+> La detección de reutilización y la ventana de gracia quedaron formalizadas en la spec como **FR-033 / CA-001-31** (2026-10-26).
 | **Passport (`@nestjs/passport` + `passport-jwt`)** | Agrega dos dependencias para algo que `@nestjs/jwt` + un guard propio resuelven. Además, inyectar el reloj en `passport-jwt` es más incómodo. |
 | **Cookies HttpOnly** | No aplican a una app nativa; la spec exige almacenamiento seguro del sistema operativo (FR-030). |
 
@@ -282,7 +284,10 @@ Los tests de CA-001-14, -16, -17, -23, -26 y -27 recorren minutos, horas o 30 d�
 - Si el email no existe, se verifica la contraseña contra un **hash ficticio** (argon2id con los mismos parámetros, generado una vez al arrancar). El costo de CPU y memoria es el mismo que con un email existente.
 - Ambos casos pasan por el mismo camino: advisory lock, contador por email (que existe aunque no haya cuenta), evento por origen y la misma respuesta `401 INVALID_CREDENTIALS` con el mismo cuerpo.
 - La espera por límite también es idéntica para emails existentes e inexistentes (CA-001-14).
-- Test: compara cuerpos byte a byte y comprueba que la mediana de N tiempos de respuesta no difiere más de un umbral (por ejemplo, 20 %) entre ambos casos.
+- **Verificación en dos niveles**:
+  1. **En CI (determinista, T054 / CA-001-13)**: con email inexistente, un spy confirma que `PasswordHasher.verifyOrDummy` ejecuta argon2 contra el hash ficticio, igual que con contraseña incorrecta, y los cuerpos se comparan byte a byte. Cada iteración usa una cuenta o un email distinto y `uniqueOrigin()`, para que los límites de FR-016 no intervengan. Así se prueba que **ambos caminos hacen el mismo trabajo**, que es la causa de que los tiempos coincidan, sin depender del reloj del runner.
+  2. **En local durante Verify (estadística, T087 / SC-006)**: script `apps/api/test/perf/sc-006-timing.perf-spec.ts`, excluido del CI. Hace N = 30 ingresos de cada caso (email inexistente y contraseña incorrecta), cada uno con email y origen propios, descarta el primer 10 % (calentamiento) y exige que las medianas no difieran más del 20 %. El resultado (equipo, fecha, medianas) se registra en `checklists/revision-manual.md`.
+- **Por qué no en CI**: los runners compartidos de GitHub Actions tienen ruido de CPU variable, y un umbral estadístico daría fallos intermitentes ajenos al código. Es la misma lógica que con Maestro (ver la nota de ejecución local del plan).
 
 ### Alternativas consideradas
 

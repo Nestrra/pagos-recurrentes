@@ -36,11 +36,11 @@ npm run -w apps/mobile test       # Jest + RNTL
 npm audit --audit-level=high
 ```
 
-**Esperado**: todo en verde; un test por cada `CA-001-01` … `CA-001-30` (buscar `CA-001-` en los nombres de los tests; ningún ID debe faltar).
+**Esperado**: todo en verde; un test por cada `CA-001-01` … `CA-001-31` (buscar `CA-001-` en los nombres de los tests; ningún ID debe faltar).
 
 ```sh
 # comprobación rápida de trazabilidad: lista los CA sin test
-for i in $(seq -w 1 30); do grep -rqs "CA-001-$i" apps/*/src apps/*/test apps/mobile/__tests__ || echo "Falta CA-001-$i"; done
+for i in $(seq -w 1 31); do grep -rqs "CA-001-$i" apps/*/src apps/*/test apps/mobile/__tests__ || echo "Falta CA-001-$i"; done
 ```
 
 ## 3. Escenarios manuales contra la API local
