@@ -52,5 +52,7 @@
   - FR-011: se aclara que la normalización NFC no se considera alterar la contraseña.
   - FR-016: los intentos rechazados durante una espera vigente no cuentan como fallos (ni por email ni por origen) y no prolongan la espera. CA-001-30.
   - Se agregaron a "Decisiones aprobadas" las cuatro decisiones de la fase Plan y dos Edge Cases (misma contraseña con distinta codificación; contraseña de más de 1 024 bytes).
+  - FR-016, FR-018 y CA-001-26: el contador por email se reinicia tras **1 hora** sin fallos, no 15 minutos. Motivo: con 15 minutos el reinicio coincidía con el tope de espera de 15 minutos; al terminar cada espera tope el contador volvía a cero y nunca acumulaba, así que un atacante recuperaba 5 intentos libres en cada ciclo. Se anotó el cambio en la respuesta original de "Clarifications" (sin reescribirla) y se agregó a "Decisiones aprobadas".
+  - CA-001-26: se agregó el caso de 59 minutos sin fallos (el contador no se reinicia y se aplica la espera de 1 minuto), para que un test falle si el reinicio ocurre antes de 1 hora.
   - La checklist sigue en 16/16: todo FR nuevo tiene CA y ningún cambio introduce detalles de implementación.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
