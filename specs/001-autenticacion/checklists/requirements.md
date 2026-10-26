@@ -45,4 +45,12 @@
   - FR-019: 5 solicitudes de registro por origen por hora.
   - FR-021: la sesión dura 30 días desde el último uso con el servidor; abrir la app sin conexión no renueva el plazo.
   - Se agregaron CA-001-26 (reinicio del contador por email) y CA-001-27 (límite por origen).
+- Revisión 2026-10-26 (fase Plan, `/speckit-plan`; IDs congelados, se usan los siguientes números libres):
+  - FR-031 (nuevo): normalización Unicode NFC de la contraseña al registrar y al ingresar. CA-001-28.
+  - FR-032 (nuevo): tope de 1 024 bytes de la contraseña; en el registro se rechaza como demasiado larga y en el ingreso como intento fallido genérico. CA-001-29.
+  - FR-007: la longitud de la contraseña (mínimo y máximo) se cuenta en puntos de código Unicode después de NFC; reemplaza "tal como la percibe la persona". Edge Case "Caracteres especiales" alineado.
+  - FR-011: se aclara que la normalización NFC no se considera alterar la contraseña.
+  - FR-016: los intentos rechazados durante una espera vigente no cuentan como fallos (ni por email ni por origen) y no prolongan la espera. CA-001-30.
+  - Se agregaron a "Decisiones aprobadas" las cuatro decisiones de la fase Plan y dos Edge Cases (misma contraseña con distinta codificación; contraseña de más de 1 024 bytes).
+  - La checklist sigue en 16/16: todo FR nuevo tiene CA y ningún cambio introduce detalles de implementación.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`

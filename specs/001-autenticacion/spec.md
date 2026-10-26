@@ -31,6 +31,13 @@ Decisiones tomadas durante la redacción de la spec y aprobadas el 2026-10-25:
 - **Sesiones múltiples con cierre por dispositivo** (FR-027): una misma cuenta puede tener sesión abierta en varios teléfonos a la vez; cerrar sesión afecta solo al dispositivo actual. No existe "cerrar sesión en todos los dispositivos" en esta feature.
 - **Rechazo de contraseña igual al email** (FR-009): una contraseña idéntica al email de la persona se rechaza por ser demasiado predecible.
 
+Decisiones aprobadas el 2026-10-26 durante la fase Plan:
+
+- **Normalización Unicode NFC de la contraseña** (FR-031): la misma letra con tilde puede llegar codificada de dos formas según el teclado o el sistema operativo; se normaliza a NFC al registrar y al ingresar para que la persona pueda ingresar desde cualquier teléfono escribiendo lo mismo. Normalizar no se considera alterar la contraseña (FR-011).
+- **Longitud medida en puntos de código Unicode tras NFC** (FR-007): reemplaza la medida "tal como la percibe la persona". Es exacta y reproducible en el servidor y en la app; como consecuencia, un emoji compuesto (por ejemplo 👨‍👩‍👧) cuenta como varios caracteres.
+- **Tope de 1 024 bytes en la contraseña** (FR-032): acota el esfuerzo de procesar entradas anómalas, tanto en el registro como en el ingreso.
+- **Los intentos rechazados durante una espera no cuentan como fallos** (FR-016): así nadie puede prolongar indefinidamente la espera de otra persona enviando intentos mientras está bloqueada.
+
 ### Decisión consciente sobre revelar emails registrados
 
 El registro informa explícitamente que un email ya tiene cuenta (FR-005). Con el alcance actual no es posible ocultarlo: el registro exitoso abre sesión de inmediato (FR-001) y la verificación del email está fuera de alcance, así que cualquier respuesta distinta ya revela la existencia del email. Se acepta el riesgo de que alguien averigüe qué emails tienen cuenta, mitigado con el límite de solicitudes de registro (FR-019). El ingreso sigue sin revelarlo (FR-015). Esta decisión debe revisarse cuando se incorpore la verificación del email.
@@ -67,6 +74,8 @@ Una persona que instala la app por primera vez crea su cuenta con su email y una
 10. **CA-001-21** — **Dado** que la persona se registra con el email `ana@ejemplo.com`, **Cuando** usa como contraseña `ana@ejemplo.com`, **Entonces** el registro se rechaza con un mensaje que indica que la contraseña es demasiado predecible y no se crea la cuenta.
 11. **CA-001-22** — **Dado** que el email `ana@ejemplo.com` no está registrado, **Cuando** llegan dos solicitudes de registro simultáneas con ese email, **Entonces** se crea exactamente una cuenta y la otra solicitud se rechaza como email ya registrado.
 12. **CA-001-23** — **Dado** que desde un mismo origen se enviaron 5 solicitudes de registro en la última hora, **Cuando** se envía una 6.ª solicitud de registro desde ese origen dentro de esa hora, **Entonces** se rechaza sin crear la cuenta y se informa a la persona que espere antes de volver a intentar.
+13. **CA-001-28** — **Dado** que Ana se registró con una contraseña que contiene `á` escrita como un único carácter (U+00E1), **Cuando** ingresa con la misma contraseña escrita con `a` seguida de la tilde combinante (U+0061 U+0301), **Entonces** ingresa a su cuenta; y viceversa (registro con la forma descompuesta, ingreso con la compuesta).
+14. **CA-001-29** — **Dado** que la persona está en el formulario de registro, **Cuando** envía una contraseña que ocupa más de 1 024 bytes, **Entonces** el registro se rechaza con el mismo mensaje de máximo permitido de FR-008 y no se crea la cuenta; y **Dado** que existe la cuenta `ana@ejemplo.com`, **Cuando** alguien intenta ingresar con una contraseña de más de 1 024 bytes, **Entonces** recibe el mismo mensaje genérico de CA-001-12 y el intento cuenta como fallido.
 
 ---
 
@@ -90,6 +99,7 @@ Una persona que ya tiene cuenta (por ejemplo, tras reinstalar la app o desde otr
 8. **CA-001-17** — **Dado** que pasaron más de 30 días desde el último uso de la sesión (aunque en ese tiempo la persona haya abierto la app sin conexión), **Cuando** intenta usar la app con conexión, **Entonces** se le pide ingresar de nuevo.
 9. **CA-001-26** — **Dado** que para `ana@ejemplo.com` hay 4 intentos fallidos consecutivos, **Cuando** pasan 15 minutos sin nuevos fallos y luego se produce 1 fallo más, **Entonces** no se aplica ninguna espera (el contador se reinició y ese fallo cuenta como el primero); y **Dado** el mismo estado de 4 fallos, **Cuando** la persona ingresa con éxito y después falla 1 vez, **Entonces** tampoco se aplica espera.
 10. **CA-001-27** — **Dado** que desde un mismo origen se registraron 20 ingresos fallidos en los últimos 15 minutos, repartidos entre emails distintos, **Cuando** se envía un nuevo ingreso desde ese origen (incluso con el email y la contraseña correctos de `ana@ejemplo.com`), **Entonces** se rechaza indicando cuándo puede volver a intentar, sin revelar si el email existe; desde otro origen, Ana ingresa sin restricción; y desde el origen restringido se vuelve a aceptar el ingreso cuando terminan los 15 minutos de espera.
+11. **CA-001-30** — **Dado** que para `ana@ejemplo.com` hay 5 intentos fallidos consecutivos y una espera vigente de 1 minuto, **Cuando** se envían 3 intentos más durante esa espera (todos rechazados) y, al terminar la espera, se produce 1 fallo más, **Entonces** la nueva espera es de 2 minutos (6.º fallo), no la que correspondería a 9 fallos; y los intentos rechazados durante la espera no cambian el momento en que esta termina.
 
 ---
 
@@ -125,7 +135,9 @@ Aplican a las tres historias.
 - **Email con mayúsculas o espacios**: se recortan los espacios al inicio y al final y se compara sin distinguir mayúsculas; `Ana@Ejemplo.com` y `ana@ejemplo.com` son la misma cuenta (CA-001-03, CA-001-11).
 - **Contraseña con espacios al inicio o al final**: se respeta tal cual; no se recorta ni se modifica, porque cambiarla haría que la persona no pudiera ingresar con lo que escribió.
 - **Contraseña en el borde del límite**: 11 caracteres se rechaza; 12, 64 y 128 se aceptan; 129 se rechaza (CA-001-04, CA-001-05, CA-001-08).
-- **Caracteres especiales**: tildes, `ñ`, emojis y espacios cuentan como caracteres válidos; la longitud se mide en caracteres visibles para la persona, no en bytes (CA-001-09).
+- **Caracteres especiales**: tildes, `ñ`, emojis y espacios cuentan como caracteres válidos; la longitud se mide en puntos de código Unicode después de normalizar a NFC, no en bytes (CA-001-09, FR-007). Un emoji compuesto puede contar como varios caracteres.
+- **Misma contraseña, distinta codificación**: una tilde escrita como carácter único o como letra + tilde combinante se trata como la misma contraseña (FR-031, CA-001-28).
+- **Contraseña desmesurada**: una contraseña de más de 1 024 bytes se rechaza en el registro como demasiado larga y en el ingreso como credenciales incorrectas (FR-032, CA-001-29).
 - **Doble toque en "Registrarme"**: dos envíos casi simultáneos con el mismo email nuevo crean una sola cuenta; el segundo envío se trata como email ya registrado (CA-001-22).
 - **Sin conexión**: si no hay conexión al registrarse, ingresar o cerrar sesión, la app informa que no hay conexión y no da por hecha la operación; los datos escritos en el formulario (excepto la contraseña) no se pierden.
 - **Cerrar sesión sin conexión**: la app borra igualmente la sesión del teléfono y vuelve a la pantalla de ingreso; la invalidación en el servidor se completa al recuperar conexión o al expirar la sesión.
@@ -157,11 +169,11 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 - **FR-004** *(no deseado)*: SI el email normalizado ya pertenece a una cuenta existente, ENTONCES el sistema DEBE rechazar el registro sin crear ni modificar ninguna cuenta. → CA-001-03
 - **FR-005** *(no deseado)*: SI el registro se rechaza porque el email ya existe, ENTONCES el sistema DEBE informar explícitamente que el email ya tiene una cuenta e invitar a ingresar con él (ver "Decisión consciente sobre revelar emails registrados"). → CA-001-03
 - **FR-006** *(no deseado)*: SI la contraseña tiene menos de 12 caracteres, ENTONCES el sistema DEBE rechazar el registro indicando el mínimo de 12 caracteres. → CA-001-04
-- **FR-007** *(ubicuo)*: El sistema DEBE aceptar contraseñas de 12 a 128 caracteres (cumpliendo así el requisito de permitir al menos 64), contando caracteres tal como los percibe la persona. → CA-001-05
+- **FR-007** *(ubicuo)*: El sistema DEBE aceptar contraseñas de 12 a 128 caracteres (cumpliendo así el requisito de permitir al menos 64). En esta spec, la longitud de la contraseña (mínimo de FR-006, máximo de FR-007 y FR-008) se cuenta en puntos de código Unicode después de la normalización NFC de FR-031. → CA-001-05
 - **FR-008** *(no deseado)*: SI la contraseña tiene más de 128 caracteres, ENTONCES el sistema DEBE rechazar el registro indicando el máximo de 128 caracteres. → CA-001-08
 - **FR-009** *(no deseado)*: SI la contraseña aparece en la lista de contraseñas comunes o filtradas, o es igual al email de la persona, ENTONCES el sistema DEBE rechazar el registro indicando que la contraseña es demasiado conocida o predecible y pidiendo otra. → CA-001-07, CA-001-21
 - **FR-010** *(ubicuo)*: El sistema NO DEBE exigir combinaciones de mayúsculas, minúsculas, números o símbolos en la contraseña. → CA-001-06
-- **FR-011** *(ubicuo)*: El sistema DEBE aceptar en la contraseña cualquier carácter imprimible, incluidos espacios, tildes, `ñ` y emojis, y NO DEBE recortarla, truncarla ni alterarla. → CA-001-09
+- **FR-011** *(ubicuo)*: El sistema DEBE aceptar en la contraseña cualquier carácter imprimible, incluidos espacios, tildes, `ñ` y emojis, y NO DEBE recortarla, truncarla ni alterarla; la normalización NFC de FR-031 no se considera una alteración. → CA-001-09
 - **FR-012** *(ubicuo)*: El sistema DEBE permitir pegar texto y usar gestores de contraseñas en los campos de contraseña de registro e ingreso. → verificado por revisión
 - **FR-013** *(ubicuo)*: El sistema DEBE garantizar que dos solicitudes de registro simultáneas con el mismo email produzcan como máximo una cuenta. → CA-001-22
 
@@ -172,6 +184,7 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 - **FR-016** *(ubicuo)*: El sistema DEBE contar los intentos fallidos de ingreso de dos formas y aplicar estos límites:
   - **Por email normalizado** (exista o no una cuenta con ese email): a partir del 5.º fallo consecutivo, impone una espera de 1 minuto que se duplica con cada fallo siguiente (1, 2, 4, 8 min…) hasta un máximo de 15 minutos. El contador se reinicia con un ingreso exitoso o cuando pasan 15 minutos desde el último fallo. → CA-001-14, CA-001-26
   - **Por origen**: si desde un mismo origen se acumulan 20 ingresos fallidos en una ventana de 15 minutos, impone una espera de 15 minutos a los ingresos desde ese origen. → CA-001-27
+  - **Intentos durante una espera**: los intentos de ingreso rechazados por una espera vigente (FR-017) NO cuentan como fallos, ni para el conteo por email ni para el conteo por origen, y no prolongan la espera. → CA-001-30
 - **FR-017** *(no deseado)*: SI se alcanza el límite de FR-016, ENTONCES el sistema DEBE rechazar los nuevos intentos de ingreso mientras dure la restricción, incluso con la contraseña correcta, e informar a la persona cuándo puede volver a intentar, sin revelar si el email existe. → CA-001-14, CA-001-27
 - **FR-018** *(por evento)*: CUANDO una persona ingresa con éxito, o pasan 15 minutos desde el último intento fallido con un email, el sistema DEBE reiniciar el conteo de intentos fallidos de ese email. → CA-001-26
 - **FR-019** *(ubicuo)*: El sistema DEBE limitar también la frecuencia de solicitudes de registro desde un mismo origen, para impedir la creación masiva de cuentas y el sondeo de emails, con un límite de 5 solicitudes de registro por origen en una ventana de 1 hora; las solicitudes que superen el límite se rechazan sin crear cuenta. → CA-001-23
@@ -198,6 +211,11 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 - **FR-028** *(ubicuo)*: El sistema NO DEBE guardar ni mostrar la contraseña en forma legible o recuperable. → CA-001-24
 - **FR-029** *(ubicuo)*: El sistema NO DEBE incluir contraseñas ni credenciales de sesión en los registros de actividad. → CA-001-25
 - **FR-030** *(ubicuo)*: El sistema DEBE guardar las credenciales de sesión en el teléfono solo en almacenamiento seguro del sistema operativo. → verificado por revisión
+
+**Tratamiento de la contraseña (registro e ingreso)**
+
+- **FR-031** *(ubicuo)*: El sistema DEBE normalizar la contraseña a la forma Unicode NFC antes de medir su longitud, compararla con la lista de FR-009 y con el email, y verificarla, tanto al registrar como al ingresar. → CA-001-28
+- **FR-032** *(no deseado)*: SI la contraseña recibida ocupa más de 1 024 bytes, ENTONCES el sistema DEBE rechazarla sin procesarla: en el registro, con el mensaje de máximo permitido de FR-008; en el ingreso, como un intento fallido con el mensaje genérico de FR-015. → CA-001-29
 
 ### Key Entities *(include if feature involves data)*
 
