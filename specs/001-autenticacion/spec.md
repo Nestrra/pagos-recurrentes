@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-25
 
-**Status**: Draft
+**Status**: Approved (Plan, 2026-10-26)
 
 **Input**: User description: "La app permite a una persona controlar cada mes sus pagos recurrentes: saber cuáles ya pagó y cuáles tiene pendientes. Cada persona necesita una cuenta propia para que sus pagos estén separados de los de otros usuarios y nadie más pueda verlos. En esta feature el usuario puede: registrarse con email y contraseña, ingresar y cerrar sesión. Reglas: el email debe tener un formato válido y no puede estar registrado previamente. La contraseña debe tener mínimo 12 caracteres y permitir al menos 64; no se exigen combinaciones de mayúsculas, números o símbolos; se rechazan contraseñas comunes o filtradas. Decisión consciente: se usan 12 caracteres en lugar de los 15 que recomienda NIST SP 800-63B rev. 4, por comodidad en móvil, compensado con el bloqueo de contraseñas comunes y el límite de intentos. Por definir: qué pasa tras varios intentos fallidos de ingreso y cuánto tiempo permanece abierta la sesión. Fuera de alcance: ingreso con Google o Apple, recuperación de contraseña, verificación del email y eliminación de la cuenta (feature 006)."
 
@@ -18,7 +18,7 @@ Esta feature entrega la puerta de entrada: crear la cuenta, ingresar y cerrar se
 
 NIST SP 800-63B rev. 4 recomienda un mínimo de 15 caracteres cuando la contraseña es el único factor. En este proyecto se fija el mínimo en **12 caracteres** por comodidad al escribir en el teclado del móvil. El riesgo se compensa con dos controles obligatorios de esta misma spec:
 
-1. Rechazo de contraseñas comunes o filtradas (FR-009).
+1. Rechazo de contraseñas comunes o filtradas (FR-009). La lista cubre las contraseñas filtradas **más frecuentes**, no todas las que se han filtrado alguna vez: una contraseña que apareció en una sola filtración puede aceptarse. Basta para ataques en línea, que el límite de intentos restringe a pocas pruebas por cuenta y donde se prueban primero las más comunes.
 2. Límite de intentos fallidos de ingreso (FR-016 a FR-018) y de solicitudes de registro (FR-019).
 
 Si alguno de estos dos controles se retira en el futuro, esta decisión debe revisarse.
@@ -38,6 +38,7 @@ Decisiones aprobadas el 2026-10-26 durante la fase Plan:
 - **Tope de 1 024 bytes en la contraseña** (FR-032): acota el esfuerzo de procesar entradas anómalas, tanto en el registro como en el ingreso.
 - **Los intentos rechazados durante una espera no cuentan como fallos** (FR-016): así nadie puede prolongar indefinidamente la espera de otra persona enviando intentos mientras está bloqueada.
 - **El contador por email se reinicia tras 1 hora sin fallos, no 15 minutos** (FR-016, FR-018): con 15 minutos el reinicio coincidía con el tope de espera, así que al terminar una espera de 15 minutos el contador volvía a cero y nunca acumulaba; un atacante recuperaba 5 intentos libres en cada ciclo.
+- **Cierre de sesión al reutilizar una credencial de renovación** (FR-033): la sesión se mantiene abierta renovando su credencial con el uso, y cada credencial de renovación sirve una sola vez. Si alguien presenta una ya usada, es señal de que pudo haberse copiado, así que se cierra la sesión entera y la persona debe ingresar de nuevo. Para no cerrar sesiones por cortes de red habituales en el móvil (la respuesta de una renovación que nunca llegó al teléfono), se admite una ventana de gracia de 30 segundos.
 
 ### Decisión consciente sobre revelar emails registrados
 
@@ -101,6 +102,7 @@ Una persona que ya tiene cuenta (por ejemplo, tras reinstalar la app o desde otr
 9. **CA-001-26** — **Dado** que para `ana@ejemplo.com` hay 4 intentos fallidos consecutivos, **Cuando** pasa 1 hora sin nuevos fallos y luego se produce 1 fallo más, **Entonces** no se aplica ninguna espera (el contador se reinició y ese fallo cuenta como el primero); y **Dado** el mismo estado de 4 fallos, **Cuando** la persona ingresa con éxito y después falla 1 vez, **Entonces** tampoco se aplica espera. Y **Dado** el mismo estado de 4 fallos, **Cuando** pasan 59 minutos sin fallos y se produce 1 fallo más, **Entonces** se aplica la espera de 1 minuto (5.º fallo).
 10. **CA-001-27** — **Dado** que desde un mismo origen se registraron 20 ingresos fallidos en los últimos 15 minutos, repartidos entre emails distintos, **Cuando** se envía un nuevo ingreso desde ese origen (incluso con el email y la contraseña correctos de `ana@ejemplo.com`), **Entonces** se rechaza indicando cuándo puede volver a intentar, sin revelar si el email existe; desde otro origen, Ana ingresa sin restricción; y desde el origen restringido se vuelve a aceptar el ingreso cuando terminan los 15 minutos de espera.
 11. **CA-001-30** — **Dado** que para `ana@ejemplo.com` hay 5 intentos fallidos consecutivos y una espera vigente de 1 minuto, **Cuando** se envían 3 intentos más durante esa espera (todos rechazados) y, al terminar la espera, se produce 1 fallo más, **Entonces** la nueva espera es de 2 minutos (6.º fallo), no la que correspondería a 9 fallos; y los intentos rechazados durante la espera no cambian el momento en que esta termina.
+12. **CA-001-31** — **Dado** que la sesión de Ana renovó su credencial de renovación C1 y recibió C2, **Cuando** alguien presenta C1 más de 30 segundos después de esa renovación, **Entonces** se rechaza, la sesión se cierra (C2 tampoco sirve ya) y se pide ingresar de nuevo; **Dado** el mismo estado, **Cuando** C1 se presenta dentro de los 30 segundos y C2 todavía no se ha usado, **Entonces** se acepta y la sesión sigue abierta; y **Dado** que C2 ya se usó, **Cuando** se presenta C1 (dentro o fuera de los 30 segundos), **Entonces** se rechaza y la sesión se cierra.
 
 ---
 
@@ -217,6 +219,10 @@ Los requisitos funcionales usan notación **EARS** (Easy Approach to Requirement
 
 - **FR-031** *(ubicuo)*: El sistema DEBE normalizar la contraseña a la forma Unicode NFC antes de medir su longitud, compararla con la lista de FR-009 y con el email, y verificarla, tanto al registrar como al ingresar. → CA-001-28
 - **FR-032** *(no deseado)*: SI la contraseña recibida ocupa más de 1 024 bytes, ENTONCES el sistema DEBE rechazarla sin procesarla: en el registro, con el mensaje de máximo permitido de FR-008; en el ingreso, como un intento fallido con el mensaje genérico de FR-015. → CA-001-29
+
+**Renovación de la sesión**
+
+- **FR-033** *(no deseado)*: SI se presenta una credencial de renovación ya usada fuera de la ventana de gracia, ENTONCES el sistema DEBE cerrar esa sesión y pedir ingresar de nuevo. La ventana de gracia son los 30 segundos siguientes a la renovación en que se usó esa credencial, y solo aplica mientras la credencial emitida en esa renovación no se haya usado. → CA-001-31
 
 ### Key Entities *(include if feature involves data)*
 

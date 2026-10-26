@@ -54,5 +54,8 @@
   - Se agregaron a "Decisiones aprobadas" las cuatro decisiones de la fase Plan y dos Edge Cases (misma contraseña con distinta codificación; contraseña de más de 1 024 bytes).
   - FR-016, FR-018 y CA-001-26: el contador por email se reinicia tras **1 hora** sin fallos, no 15 minutos. Motivo: con 15 minutos el reinicio coincidía con el tope de espera de 15 minutos; al terminar cada espera tope el contador volvía a cero y nunca acumulaba, así que un atacante recuperaba 5 intentos libres en cada ciclo. Se anotó el cambio en la respuesta original de "Clarifications" (sin reescribirla) y se agregó a "Decisiones aprobadas".
   - CA-001-26: se agregó el caso de 59 minutos sin fallos (el contador no se reinicia y se aplica la espera de 1 minuto), para que un test falle si el reinicio ocurre antes de 1 hora.
+  - FR-033 (nuevo) y CA-001-31: si se presenta una credencial de renovación ya usada fuera de la ventana de gracia (30 s, solo mientras la credencial emitida en esa renovación no se haya usado), se cierra la sesión y se pide ingresar de nuevo. Formaliza en la spec la detección de reutilización que el plan ya diseñaba (research R4); se agregó a "Decisiones aprobadas".
+  - `/speckit-analyze` (A1): en "Decisión consciente sobre la longitud mínima" se aclaró que la lista prohibida cubre las contraseñas filtradas más frecuentes, no todas; FR-009 no cambia.
+  - `/speckit-analyze` (L1): estado de la spec cambiado de "Draft" a "Approved (Plan, 2026-10-26)".
   - La checklist sigue en 16/16: todo FR nuevo tiene CA y ningún cambio introduce detalles de implementación.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
