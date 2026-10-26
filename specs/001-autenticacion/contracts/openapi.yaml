@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: pagos-recurrentes API — Autenticación (feature 001)
+  version: 0.1.0
+  description: |
+    Contrato de la feature 001-autenticacion. Fuente: specs/001-autenticacion/spec.md y plan.md.
+    Todos los mensajes al usuario están en español. Todas las respuestas de error usan el esquema `ErrorResponse`.
+    Rutas en inglés (constitución). Base: `/v1`, salvo `/health`.
+servers:
+  - url: http://localhost:3000
+    description: Local
+
+tags:
+  - name: auth
+  - name: me
+  - name: health
+
+paths:
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Crear cuenta y abrir sesión (FR-001 a FR-013, FR-019)
+      description: |
+        Límite por origen: 5 solicitudes por hora (FR-019). Cuentan todas las solicitudes, incluidas las que fallan
+        la validación, excepto las rechazadas por el propio límite. El límite se evalúa antes que la validación del cuerpo.
+        Orden de la política de contraseña: corta → larga → común → igual al email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Cuenta creada y sesión abierta (CA-001-01)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '400':
+          description: |
+            `INVALID_EMAIL` (CA-001-02), `PASSWORD_TOO_SHORT` (CA-001-04), `PASSWORD_TOO_LONG` (CA-001-08),
+            `PASSWORD_TOO_COMMON` (CA-001-07), `PASSWORD_TOO_PREDICTABLE` (CA-001-21),
+            `VALIDATION_ERROR` (campos faltantes, tipos incorrectos o campos no declarados).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                tooShort:
+                  value: { error: { code: PASSWORD_TOO_SHORT, message: 'La contraseña debe tener al menos 12 caracteres.', fields: [password] } }
+                tooCommon:
+                  value: { error: { code: PASSWORD_TOO_COMMON, message: 'Esa contraseña es demasiado conocida. Elige otra.', fields: [password] } }
+        '409':
+          description: Email ya registrado (CA-001-03, CA-001-22)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example: { error: { code: EMAIL_ALREADY_REGISTERED, message: 'Este email ya tiene una cuenta. Ingresa con él.', fields: [email] } }
+        '429':
+          description: Límite de registros por origen (CA-001-23)
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example: { error: { code: REGISTER_RATE_LIMITED, message: 'Demasiados intentos de registro. Vuelve a intentarlo más tarde.', retryAt: '2026-10-26T15:00:00.000Z' } }
+
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Ingresar (FR-014 a FR-018)
+      description: |
+        Email inexistente y contraseña incorrecta producen la misma respuesta, en un tiempo equivalente (FR-015, SC-006).
+        Durante una espera se rechaza incluso con credenciales correctas, sin revelar si el email existe (FR-017).
+        Los intentos rechazados durante una espera no cuentan como fallos ni prolongan la espera (FR-016, CA-001-30).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Sesión abierta (CA-001-10, CA-001-11)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '400':
+          description: '`VALIDATION_ERROR` (cuerpo mal formado o campos no declarados)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Credenciales incorrectas (CA-001-12, CA-001-13)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example: { error: { code: INVALID_CREDENTIALS, message: 'Email o contraseña incorrectos.' } }
+        '429':
+          description: Espera por email o por origen (CA-001-14, CA-001-27)
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example: { error: { code: LOGIN_TEMPORARILY_BLOCKED, message: 'Demasiados intentos. Podrás volver a intentarlo a las 10:42.', retryAt: '2026-10-26T15:42:00.000Z' } }
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renovar tokens con rotación (FR-020, FR-021)
+      description: |
+        Invalida el token presentado y emite un par nuevo. Si llega un token ya usado fuera de la ventana de gracia
+        de 30 s, se revoca toda la sesión (detección de reutilización).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '200':
+          description: Par nuevo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          description: Sesión inválida, cerrada, expirada o revocada por reutilización (CA-001-17, CA-001-19)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example: { error: { code: SESSION_INVALID, message: 'Tu sesión terminó. Ingresa de nuevo.' } }
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Cerrar la sesión de este dispositivo (FR-026, FR-027)
+      description: Idempotente. Responde 204 aunque el token no exista o la sesión ya esté cerrada, para que la app pueda reintentar sin riesgo.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '204':
+          description: Sesión cerrada (CA-001-18, CA-001-20)
+        '400':
+          description: '`VALIDATION_ERROR`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /v1/me:
+    get:
+      tags: [me]
+      summary: Cuenta de la sesión actual (FR-023, FR-025)
+      description: La cuenta se determina solo por el token de acceso. Cualquier parámetro adicional se rechaza.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Datos de la propia cuenta (CA-001-15)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Sin sesión válida (CA-001-19)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /health:
+    get:
+      tags: [health]
+      summary: Verificación de vida (CI y contenedores)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de acceso JWT HS256, 15 minutos. Claims `sub` (userId) y `sid` (sessionId). Se valida además contra la sesión en BD en cada solicitud.
+
+  headers:
+    RetryAfter:
+      description: Segundos hasta que se puede volver a intentar.
+      schema: { type: integer, minimum: 1 }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          description: Se recorta y pasa a minúsculas antes de validar (FR-002).
+          examples: ['ana@ejemplo.com']
+        password:
+          type: string
+          description: |
+            Se normaliza a NFC (FR-031). 12 a 128 puntos de código Unicode tras NFC (FR-006 a FR-008).
+            Como máximo 1 024 bytes UTF-8 en la entrada cruda (FR-032). No se recorta (FR-011).
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, maxLength: 254 }
+        password: { type: string, description: 'Se normaliza a NFC (FR-031). Más de 1 024 bytes UTF-8 → 401 INVALID_CREDENTIALS y cuenta como fallo (FR-032). Sin política de longitud ni de lista en el ingreso.' }
+
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Token opaco (32 bytes en base64url, sin relleno).
+
+    AuthSession:
+      type: object
+      required: [accessToken, accessTokenExpiresAt, refreshToken, user]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresAt: { type: string, format: date-time }
+        refreshToken: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        user: { $ref: '#/components/schemas/User' }
+
+    User:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, description: Email normalizado }
+        createdAt: { type: string, format: date-time }
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - INVALID_EMAIL
+        - PASSWORD_TOO_SHORT
+        - PASSWORD_TOO_LONG
+        - PASSWORD_TOO_COMMON
+        - PASSWORD_TOO_PREDICTABLE
+        - EMAIL_ALREADY_REGISTERED
+        - REGISTER_RATE_LIMITED
+        - INVALID_CREDENTIALS
+        - LOGIN_TEMPORARILY_BLOCKED
+        - SESSION_INVALID
+        - NOT_FOUND
+        - INTERNAL_ERROR
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string, description: Mensaje en español apto para mostrar }
+            retryAt: { type: string, format: date-time, description: Solo en 429 }
+            fields:
+              type: array
+              items: { type: string }
+              description: Campos del formulario afectados, si aplica
