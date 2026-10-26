@@ -1,7 +1,7 @@
 # STATUS — pagos-recurrentes
 
 **Última actualización:** 2026-10-26
-**Fase actual:** Fase 1 — feature `001-autenticacion` — Plan cerrado; sigue **Tasks**
+**Fase actual:** Fase 1 — feature `001-autenticacion` — Tasks y Analyze cerrados; sigue **Implement** (T001)
 
 ## Fase 0 — Preparación ✅
 
@@ -37,22 +37,39 @@
 - [x] Commits `1e2d459`, `49338df` (spec) y `13b5162 docs(001): plan de autenticación`, con push
 - [ ] Preguntas de entrevista de cierre — **omitidas por decisión de Raúl** (retomar si se quiere)
 
+### Tasks ✅
+- [x] `/speckit-tasks` → `tasks.md`: 87 tareas (Setup 10 · Foundational 11 · US1 29 · US2 25 · US3 5 · Polish 7), 50 en paralelo
+- [x] Las primeras tareas son el esqueleto del monorepo y el CI mínimo (T001–T010)
+- [x] Una tarea de test por CA, nombrada con su ID y anterior a su implementación (un archivo e2e por CA)
+- [x] FR-012 y FR-030 con tarea de revisión (T082, T083), no de test
+- [x] Dependencias (📦) y confirmaciones (⚠ migraciones, descarga de SecLists, `CLAUDE.md`) marcadas por tarea
+- [x] Cambio de spec descubierto en Tasks: **FR-033** (reutilizar una credencial de renovación fuera de la gracia de 30 s cierra la sesión) → CA-001-31
+
+### Analyze ✅
+- [x] Primera pasada: 0 CRITICAL, 2 HIGH, 8 MEDIUM, 4 LOW
+  - HIGH: el test de tiempos de SC-006 chocaba con el límite por email (FR-016), y la gracia de 30 s borraba una fila referenciada por FK (`replacedById`)
+- [x] Todo corregido: spec (A1: la lista cubre las filtradas más frecuentes; L1: estado Approved), plan, research, data-model y tasks
+- [x] Segunda pasada: 33 FR + 6 SC, 31 CA, 87 tareas, **100 % de cobertura, 0 issues**
+- [x] Commits `2b33ccb` (spec), `f1a1680` (plan) y `94df942 docs(001): tareas de autenticación`, sin push
+- [ ] Desviación abierta: la plantilla de PR va dentro de T009 y no como tarea propia (para no renumerar)
+
 ### Siguiente
-- [ ] Teoría de Tasks
-- [ ] `/speckit-tasks` → `tasks.md`
-- [ ] Implement → Verify
+- [ ] `/speckit-implement`, una tarea a la vez con diff revisado, empezando por T001
+- [ ] Verify: Maestro (T084) y medición de SC-006 (T087) en local
 
 ## Decisiones técnicas del Plan (feature 001)
 
 - **Hash:** argon2id (19 MiB, t=2, p=1, OWASP). Se descartó bcrypt porque trunca a 72 bytes y violaría FR-011.
 - **Contraseñas comunes:** lista local (SecLists, MIT, filtrada a ≥12 caracteres) cargada en memoria. Se descartó la API de HIBP por ser un servicio externo en tiempo de ejecución. Limitación conocida: cubre contraseñas comunes, no todas las filtradas.
-- **Sesión:** JWT de acceso HS256 de 15 min y token de renovación opaco, con hash SHA-256 en la BD. Rotación con detección de reutilización y gracia de 30 s. El guard consulta la sesión en la BD en cada solicitud para que el logout sea inmediato (SC-005); se acepta perder la ventaja de no tener estado.
+- **Sesión:** JWT de acceso HS256 de 15 min y token de renovación opaco, con hash SHA-256 en la BD. Rotación con detección de reutilización y gracia de 30 s (formalizada como FR-033 / CA-001-31). El guard consulta la sesión en la BD en cada solicitud para que el logout sea inmediato (SC-005); se acepta perder la ventaja de no tener estado.
 - **Límites:** contadores en Postgres con claves HMAC del email y de la IP (minimización de datos). La IP se toma de `CF-Connecting-IP`, e IPv6 se agrupa por /64. Se usa `pg_advisory_xact_lock` por email.
 - **Tiempo:** `Clock` inyectado; sin `@default(now())` en campos con lógica de negocio.
 - **Longitud:** `[...pw.normalize('NFC')].length` en la app y en la API, nunca `.length`.
 - **Ingreso:** si el email no existe, argon2 se verifica contra un hash ficticio para igualar tiempos (SC-006).
 - **Registro:** el error P2002 de Prisma se traduce a `409 EMAIL_ALREADY_REGISTERED` (CA-001-22).
-- **Maestro** no corre en el CI (desviación justificada de un DEBERÍA); se ejecuta en local durante Verify.
+- **Ejecución local en Verify** (no en CI): Maestro (desviación justificada de un DEBERÍA) y la medición estadística de tiempos de SC-006. En CI, SC-006 se cubre de forma determinista: un spy confirma que argon2 se ejecuta contra el hash ficticio.
+- **Cobertura:** el 80 % de `*.service.ts` se mide sobre unit + e2e juntos.
+- **Rotación:** `replacedById` con `onDelete: SetNull`; en la gracia el orden es crear → reasignar → borrar.
 
 ## Decisiones de Clarify (feature 001)
 
@@ -73,7 +90,7 @@
 
 ## Roadmap de features (Proyecto 1)
 
-000 constitución (hecha) · 001 autenticación (en curso: Tasks) · 002 crear pago · 003 listar pagos · 004 cambiar estado · 005 eliminar pago · 006 eliminar cuenta
+000 constitución (hecha) · 001 autenticación (en curso: Implement) · 002 crear pago · 003 listar pagos · 004 cambiar estado · 005 eliminar pago · 006 eliminar cuenta
 
 **Candidatas para la v1.1 (OpenSpec):** verificación de email (reabre FR-005), recordatorios, editar pagos.
 
@@ -86,3 +103,6 @@
 - Los parámetros de una spec se revisan juntos (el reinicio de 15 min coincidía con el tope de 15 min).
 - Análisis de valores límite: probar a ambos lados del umbral (59 min y 1 h), o el test no detecta una regresión.
 - Las Clarifications se anotan, no se reescriben: son un registro de decisiones.
+- Un comportamiento de diseño sin CA (la detección de reutilización) es un hueco de la spec: se formaliza como FR/CA antes de implementar.
+- Analyze encuentra tests que chocan con otros requisitos: los límites de intentos invalidaban la medición de tiempos.
+- Los tests estadísticos de tiempo son intermitentes en CI: en CI se prueba la causa (mismo trabajo en ambos caminos) y el efecto (tiempos) se mide en local.
